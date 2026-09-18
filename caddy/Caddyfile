@@ -1,0 +1,16 @@
+{$VOICE_HOST:voice.local} {
+    tls internal
+    encode zstd gzip
+
+    handle_path /api/* {
+        reverse_proxy voice-api:8080
+    }
+
+    handle_path /livekit/* {
+        reverse_proxy livekit:7880
+    }
+
+    handle {
+        reverse_proxy frontend:80
+    }
+}

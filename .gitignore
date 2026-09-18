@@ -1,0 +1,14 @@
+.env
+.env.cpu
+.env.gpu
+.env.test
+caddy-root.crt
+.DS_Store
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+*.py[cod]
+node_modules/
+frontend/dist/
+.pnpm-store/
+*.ses

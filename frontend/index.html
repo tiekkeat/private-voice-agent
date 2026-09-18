@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0b1118" />
+    <title>Realtime Voice Gateway</title>
+  </head>
+  <body>
+    <main class="shell">
+      <header>
+        <p class="eyebrow">SELF-HOSTED VOICE</p>
+        <h1>Speak naturally.<br />Interrupt freely.</h1>
+        <p class="lede">A low-latency LiveKit voice session with local speech recognition and Kokoro audio.</p>
+      </header>
+
+      <section class="session-card" aria-live="polite">
+        <div class="status-row">
+          <div>
+            <span class="status-dot" id="status-dot"></span>
+            <span id="status">Disconnected</span>
+          </div>
+          <div class="level" aria-label="Microphone level"><span id="level-bar"></span></div>
+        </div>
+
+        <label for="display-name">Your name</label>
+        <input id="display-name" maxlength="64" value="Guest" autocomplete="name" />
+
+        <div class="actions">
+          <button id="connect" type="button">Connect microphone</button>
+          <button id="disconnect" type="button" class="secondary" disabled>Disconnect</button>
+        </div>
+        <p id="error" class="error" role="alert"></p>
+      </section>
+
+      <section class="transcript-card">
+        <div class="transcript-heading">
+          <h2>Conversation</h2>
+          <span id="room-name"></span>
+        </div>
+        <div id="transcript" class="transcript">
+          <p class="empty">Your transcript will appear here.</p>
+        </div>
+      </section>
+    </main>
+    <audio id="remote-audio" autoplay></audio>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,191 @@
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-voice-environment: &voice-environment
+  LIVEKIT_URL: ${LIVEKIT_URL:-ws://livekit:7880}
+  LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:?Set LIVEKIT_API_KEY}
+  LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:?Set LIVEKIT_API_SECRET}
+  PUBLIC_LIVEKIT_URL: ${PUBLIC_LIVEKIT_URL:?Set PUBLIC_LIVEKIT_URL}
+  LLM_BASE_URL: ${LLM_BASE_URL:-https://api.openai.com/v1}
+  LLM_API_KEY: ${LLM_API_KEY:?Set LLM_API_KEY}
+  LLM_MODEL: ${LLM_MODEL:?Set LLM_MODEL}
+  STT_BASE_URL: ${STT_BASE_URL:-http://faster-whisper:8000/v1}
+  STT_MODEL: ${STT_MODEL:-Systran/faster-whisper-small}
+  TTS_BASE_URL: ${TTS_BASE_URL:-http://kokoro:8880/v1}
+  TTS_MODEL: ${TTS_MODEL:-kokoro}
+  TTS_VOICE: ${TTS_VOICE:-af_heart}
+  TTS_CHINESE_VOICE: ${TTS_CHINESE_VOICE:-zf_xiaoxiao}
+  TURN_DETECTOR_MODE: ${TURN_DETECTOR_MODE:-v1-mini}
+  TURN_DETECTOR_VERSION: ${TURN_DETECTOR_VERSION:-v1-mini}
+  SYSTEM_PROMPT: ${SYSTEM_PROMPT:-You are a concise and friendly voice assistant. Keep most replies to one or two short sentences.}
+  DEPLOYMENT_MODE: ${DEPLOYMENT_MODE:-cpu}
+  STT_DEVICE: ${STT_DEVICE:-cpu}
+  STT_COMPUTE_TYPE: ${STT_COMPUTE_TYPE:-int8}
+  TTS_DEVICE: ${TTS_DEVICE:-cpu}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  TZ: ${TZ:-Asia/Kuala_Lumpur}
+
+services:
+  redis:
+    image: redis:8.2.1-alpine
+    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+    networks: [voice-internal]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    logging: *default-logging
+
+  livekit:
+    image: livekit/livekit-server:v1.13.7
+    command: ["--config", "/etc/livekit/livekit.yaml", "--node-ip", "${LIVEKIT_NODE_IP:?Set LIVEKIT_NODE_IP to the VM LAN address}"]
+    restart: unless-stopped
+    environment:
+      LIVEKIT_KEYS: "${LIVEKIT_API_KEY:?Set LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET:?Set LIVEKIT_API_SECRET}"
+    volumes:
+      - ./livekit/livekit.yaml:/etc/livekit/livekit.yaml:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+    ports:
+      - "${BIND_ADDRESS:-0.0.0.0}:7881:7881/tcp"
+      - "${BIND_ADDRESS:-0.0.0.0}:50000-50100:50000-50100/udp"
+    networks: [voice-internal]
+    logging: *default-logging
+
+  faster-whisper:
+    image: ghcr.io/speaches-ai/speaches:0.8.3-cpu
+    restart: unless-stopped
+    environment:
+      WHISPER__INFERENCE_DEVICE: ${STT_DEVICE:-cpu}
+      WHISPER__COMPUTE_TYPE: ${STT_COMPUTE_TYPE:-int8}
+      PRELOAD_MODELS: ${STT_MODEL:-Systran/faster-whisper-small}
+    volumes:
+      - whisper-models:/home/ubuntu/.cache/huggingface/hub
+    networks: [voice-internal]
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://127.0.0.1:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+    logging: *default-logging
+
+  whisper-model-setup:
+    build:
+      context: ./voice-core
+    command: ["python", "-m", "app.model_setup"]
+    restart: "no"
+    environment:
+      STT_BASE_URL: ${STT_BASE_URL:-http://faster-whisper:8000/v1}
+      STT_MODEL: ${STT_MODEL:-Systran/faster-whisper-small}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    depends_on:
+      faster-whisper:
+        condition: service_healthy
+    networks: [voice-internal]
+    logging: *default-logging
+
+  kokoro:
+    image: ghcr.io/remsky/kokoro-fastapi-cpu:v0.9.0
+    restart: unless-stopped
+    environment:
+      DEVICE_TYPE: ${TTS_DEVICE:-cpu}
+      USE_GPU: "false"
+      API_LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DEFAULT_VOICE: ${TTS_VOICE:-af_heart}
+    networks: [voice-internal]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8880/v1/models', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+    logging: *default-logging
+
+  voice-core:
+    build:
+      context: ./voice-core
+    command: ["python", "-m", "app.agent", "start"]
+    restart: unless-stopped
+    environment: *voice-environment
+    depends_on:
+      livekit:
+        condition: service_started
+      faster-whisper:
+        condition: service_healthy
+      whisper-model-setup:
+        condition: service_completed_successfully
+      kokoro:
+        condition: service_healthy
+    networks: [voice-internal]
+    logging: *default-logging
+
+  voice-api:
+    build:
+      context: ./voice-core
+    command: ["uvicorn", "app.api:app", "--host", "0.0.0.0", "--port", "8080"]
+    restart: unless-stopped
+    environment: *voice-environment
+    depends_on:
+      livekit:
+        condition: service_started
+      faster-whisper:
+        condition: service_healthy
+      whisper-model-setup:
+        condition: service_completed_successfully
+      kokoro:
+        condition: service_healthy
+    networks: [voice-internal]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    logging: *default-logging
+
+  frontend:
+    build:
+      context: ./frontend
+    restart: unless-stopped
+    networks: [voice-internal]
+    logging: *default-logging
+
+  caddy:
+    image: caddy:2.10.2-alpine
+    restart: unless-stopped
+    environment:
+      VOICE_HOST: ${VOICE_HOST:-voice.local}
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    ports:
+      - "${BIND_ADDRESS:-0.0.0.0}:80:80/tcp"
+      - "${BIND_ADDRESS:-0.0.0.0}:443:443/tcp"
+    depends_on:
+      frontend:
+        condition: service_started
+      voice-api:
+        condition: service_healthy
+      livekit:
+        condition: service_started
+    networks: [voice-internal]
+    logging: *default-logging
+
+networks:
+  voice-internal:
+    name: realtime-voice-internal
+
+volumes:
+  redis-data:
+  whisper-models:
+  caddy-data:
+  caddy-config:

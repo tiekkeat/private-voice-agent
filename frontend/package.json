@@ -1,0 +1,19 @@
+{
+  "name": "realtime-voice-frontend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "packageManager": "pnpm@11.19.0",
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite --host 0.0.0.0",
+    "check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "livekit-client": "2.15.6"
+  },
+  "devDependencies": {
+    "typescript": "5.9.2",
+    "vite": "7.1.3"
+  }
+}
