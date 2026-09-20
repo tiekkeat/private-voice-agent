@@ -113,6 +113,25 @@ The supplied `.env.gpu` selects CUDA/float16 and the multilingual large-v3
 turbo Whisper model. To favor VRAM efficiency over accuracy, change its
 `STT_MODEL` to `Systran/faster-whisper-small` and its compute type to `int8`.
 
+For mixed English/Mandarin conversations, keep `STT_LANGUAGE=auto`. Very short
+utterances do not contain much evidence for Whisper's language detector, so a
+Mandarin-heavy deployment should use `STT_LANGUAGE=zh`; this prevents Mandarin
+from being decoded as Korean or Russian. Use `en` for English-only sessions.
+
+The default interruption settings filter brief non-speech sounds while keeping
+barge-in enabled:
+
+```dotenv
+INTERRUPTION_MIN_DURATION=0.8
+INTERRUPTION_MIN_WORDS=1
+FALSE_INTERRUPTION_TIMEOUT=1.5
+RESUME_FALSE_INTERRUPTION=true
+```
+
+If coughs still interrupt playback, raise `INTERRUPTION_MIN_DURATION` gradually
+to `1.0` or `1.2`. Raising `INTERRUPTION_MIN_WORDS` to `2` is stricter, but then
+a one-word command such as "stop" will no longer interrupt immediately.
+
 ## 4. Open only the required LAN ports
 
 Permit these paths from trusted LAN clients:

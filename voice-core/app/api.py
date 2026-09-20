@@ -89,6 +89,7 @@ async def health() -> dict[str, object]:
             "device": settings.stt_device,
             "compute_type": settings.stt_compute_type,
             "model": settings.stt_model,
+            "language": settings.stt_language,
         },
         "llm": {"status": "configured", "backend": "openai_compatible"},
         "tts": {
@@ -97,6 +98,11 @@ async def health() -> dict[str, object]:
             "model": settings.tts_model,
         },
         "turn_detector": settings.turn_detector_mode,
+        "interruption": {
+            "min_duration": settings.interruption_min_duration,
+            "min_words": settings.interruption_min_words,
+            "resume_false_interruption": settings.resume_false_interruption,
+        },
         "deployment_mode": settings.deployment_mode,
     }
 

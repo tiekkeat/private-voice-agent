@@ -20,6 +20,7 @@ from app.backends import OpenAICompatibleBackend
 from app.config import get_settings
 from app.language import contains_han, contains_latin_word, select_tts_voice
 from app.logging_config import configure_logging
+from app.speech import stt_language_options
 
 settings = get_settings()
 configure_logging(settings.log_level)
@@ -86,13 +87,23 @@ server.setup_fnc = prewarm
 
 def _turn_handling() -> TurnHandlingOptions:
     if settings.turn_detector_mode == "vad":
-        return TurnHandlingOptions(turn_detection="vad")
-
-    return TurnHandlingOptions(
-        turn_detection=inference.TurnDetector(
+        turn_detector = "vad"
+    else:
+        turn_detector = inference.TurnDetector(
             version=settings.turn_detector_version,
             local_fallback=True,
         )
+
+    return TurnHandlingOptions(
+        turn_detection=turn_detector,
+        interruption={
+            "mode": "vad",
+            "min_duration": settings.interruption_min_duration,
+            "min_words": settings.interruption_min_words,
+            "false_interruption_timeout": settings.false_interruption_timeout,
+            "resume_false_interruption": settings.resume_false_interruption,
+        },
+        preemptive_generation={"enabled": True},
     )
 
 
@@ -106,7 +117,7 @@ async def voice_session(ctx: JobContext) -> None:
             model=settings.stt_model,
             base_url=settings.stt_base_url,
             api_key="not-needed",
-            detect_language=True,
+            **stt_language_options(settings.stt_language, settings.stt_prompt),
         ),
         llm=backend.build_llm(),
         tts=openai.TTS(
@@ -118,7 +129,6 @@ async def voice_session(ctx: JobContext) -> None:
         ),
         vad=ctx.proc.userdata["vad"],
         turn_handling=_turn_handling(),
-        preemptive_generation=True,
     )
 
     @session.on("metrics_collected")
@@ -141,6 +151,9 @@ async def voice_session(ctx: JobContext) -> None:
         extra={
             "backend": backend.name,
             "turn_detector": settings.turn_detector_mode,
+            "stt_language": settings.stt_language,
+            "interruption_min_duration": settings.interruption_min_duration,
+            "interruption_min_words": settings.interruption_min_words,
         },
     )
 

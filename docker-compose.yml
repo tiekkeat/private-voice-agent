@@ -14,12 +14,18 @@ x-voice-environment: &voice-environment
   LLM_MODEL: ${LLM_MODEL:?Set LLM_MODEL}
   STT_BASE_URL: ${STT_BASE_URL:-http://faster-whisper:8000/v1}
   STT_MODEL: ${STT_MODEL:-Systran/faster-whisper-small}
+  STT_LANGUAGE: ${STT_LANGUAGE:-auto}
+  STT_PROMPT: ${STT_PROMPT:-The speaker uses only English or Mandarin Chinese. Transcribe Mandarin as Simplified Chinese. Ignore coughs breathing and other non-speech sounds.}
   TTS_BASE_URL: ${TTS_BASE_URL:-http://kokoro:8880/v1}
   TTS_MODEL: ${TTS_MODEL:-kokoro}
   TTS_VOICE: ${TTS_VOICE:-af_heart}
   TTS_CHINESE_VOICE: ${TTS_CHINESE_VOICE:-zf_xiaoxiao}
   TURN_DETECTOR_MODE: ${TURN_DETECTOR_MODE:-v1-mini}
   TURN_DETECTOR_VERSION: ${TURN_DETECTOR_VERSION:-v1-mini}
+  INTERRUPTION_MIN_DURATION: ${INTERRUPTION_MIN_DURATION:-0.8}
+  INTERRUPTION_MIN_WORDS: ${INTERRUPTION_MIN_WORDS:-1}
+  FALSE_INTERRUPTION_TIMEOUT: ${FALSE_INTERRUPTION_TIMEOUT:-1.5}
+  RESUME_FALSE_INTERRUPTION: ${RESUME_FALSE_INTERRUPTION:-true}
   SYSTEM_PROMPT: ${SYSTEM_PROMPT:-You are a concise and friendly voice assistant. Keep most replies to one or two short sentences.}
   DEPLOYMENT_MODE: ${DEPLOYMENT_MODE:-cpu}
   STT_DEVICE: ${STT_DEVICE:-cpu}

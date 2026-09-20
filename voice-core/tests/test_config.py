@@ -1,6 +1,7 @@
 from app.config import Settings
 from app.model_setup import model_url
 from app.language import contains_han, contains_latin_word, select_tts_voice
+from app.speech import stt_language_options
 
 
 def test_base_urls_are_normalized() -> None:
@@ -38,3 +39,18 @@ def test_english_reply_selects_english_voice() -> None:
     assert not contains_han("Hello, how are you?")
     assert contains_latin_word("Hello")
     assert select_tts_voice("Hello!", "af_heart", "zf_xiaoxiao") == "af_heart"
+
+
+def test_auto_stt_detects_language_with_prompt() -> None:
+    assert stt_language_options("auto", "English or Mandarin") == {
+        "detect_language": True,
+        "prompt": "English or Mandarin",
+    }
+
+
+def test_locked_mandarin_stt_disables_detection() -> None:
+    assert stt_language_options("zh", "Mandarin") == {
+        "detect_language": False,
+        "language": "zh",
+        "prompt": "Mandarin",
+    }

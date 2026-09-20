@@ -47,6 +47,7 @@ Edit `.env` and set at least:
 - `PUBLIC_LIVEKIT_URL`: normally `wss://<VOICE_HOST>/livekit`
 - `LLM_BASE_URL`, `LLM_API_KEY`, and `LLM_MODEL`
 - `TTS_VOICE` and `TTS_CHINESE_VOICE` select the English and Mandarin Kokoro voices
+- `STT_LANGUAGE`: `auto` for bilingual use, `zh` to lock Mandarin, or `en` to lock English
 
 The LLM key is used only by the server-side worker and is never returned to the browser, following the [official OpenAI API authentication guidance](https://developers.openai.com/api/reference/overview#authentication).
 
@@ -55,6 +56,10 @@ The LLM key is used only by the server-side worker and is never returned to the 
 `TURN_DETECTOR_MODE=v1-mini` enables LiveKit's current audio turn detector. In LiveKit Agents 1.8.2, this model runs locally by design and keeps roughly 108 MB of weights resident in the worker process.
 
 For the lowest-resource fallback, set `TURN_DETECTOR_MODE=vad`. Silero still provides fast speech-start detection and barge-in, but end-of-turn behavior is less natural.
+
+Interruption defaults require 0.8 seconds of detected speech and at least one
+recognized word before stopping playback. Tune `INTERRUPTION_MIN_DURATION` and
+`INTERRUPTION_MIN_WORDS` if the microphone environment is unusually noisy.
 
 ## Run
 

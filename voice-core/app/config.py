@@ -24,6 +24,11 @@ class Settings(BaseSettings):
 
     stt_base_url: str = "http://faster-whisper:8000/v1"
     stt_model: str = "Systran/faster-whisper-small"
+    stt_language: Literal["auto", "en", "zh"] = "auto"
+    stt_prompt: str = (
+        "The speaker uses only English or Mandarin Chinese. Transcribe Mandarin "
+        "as Simplified Chinese. Ignore coughs, breathing, and other non-speech sounds."
+    )
     tts_base_url: str = "http://kokoro:8880/v1"
     tts_model: str = "kokoro"
     tts_voice: str = "af_heart"
@@ -31,6 +36,10 @@ class Settings(BaseSettings):
 
     turn_detector_mode: Literal["v1-mini", "vad"] = "v1-mini"
     turn_detector_version: str = "v1-mini"
+    interruption_min_duration: float = Field(default=0.8, ge=0.1, le=5.0)
+    interruption_min_words: int = Field(default=1, ge=0, le=10)
+    false_interruption_timeout: float = Field(default=1.5, ge=0.1, le=10.0)
+    resume_false_interruption: bool = True
 
     system_prompt: str = (
         "You are a concise, friendly voice assistant. Reply in the user's requested "
