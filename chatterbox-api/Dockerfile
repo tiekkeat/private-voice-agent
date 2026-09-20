@@ -1,6 +1,8 @@
 FROM pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime
 
-ARG CHATTERBOX_TTS_VERSION=0.1.7
+# PyPI 0.1.7 predates the multilingual V3 loader. Pin the official source
+# revision so this image actually runs the V3 model advertised by the API.
+ARG CHATTERBOX_TTS_COMMIT=5de7a54aa4e5e2baadb0182dde554908b48b85c2
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PIP_NO_CACHE_DIR=1 \
@@ -19,7 +21,7 @@ RUN apt-get update \
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir \
-    "chatterbox-tts==${CHATTERBOX_TTS_VERSION}" \
+    "chatterbox-tts @ git+https://github.com/resemble-ai/chatterbox.git@${CHATTERBOX_TTS_COMMIT}" \
     --requirement requirements.txt
 
 COPY app.py .

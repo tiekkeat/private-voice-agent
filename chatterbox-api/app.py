@@ -85,7 +85,7 @@ async def lifespan(_: FastAPI):
     device = os.getenv("CHATTERBOX_DEVICE", "cuda")
     if device == "cuda" and not torch.cuda.is_available():
         raise RuntimeError("CHATTERBOX_DEVICE=cuda but CUDA is unavailable")
-    model = ChatterboxMultilingualTTS.from_pretrained(device=device)
+    model = ChatterboxMultilingualTTS.from_pretrained(device=device, t3_model="v3")
     yield
     model = None
     if torch.cuda.is_available():
