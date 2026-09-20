@@ -16,6 +16,15 @@ def ensure_stt_model() -> None:
     model_id = os.getenv("STT_MODEL", "Systran/faster-whisper-small")
     configure_logging(os.getenv("LOG_LEVEL", "INFO"))
     logger = logging.getLogger("stt-model-setup")
+    if os.getenv("STT_MODEL_SETUP_ENABLED", "true").lower() not in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }:
+        logger.info("stt_model_setup_skipped", extra={"model": model_id})
+        return
+
     url = model_url(base_url, model_id)
 
     with httpx.Client(timeout=None) as client:

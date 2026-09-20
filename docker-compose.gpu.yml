@@ -1,9 +1,31 @@
 services:
   faster-whisper:
-    image: ghcr.io/speaches-ai/speaches:0.8.3-cuda-12.6.3
+    # The service name is retained so the base stack dependency graph still works.
+    image: qwenllm/qwen3-asr@sha256:fb75b775f089e06e5a1aaebffd421e37505cc630d50c86d889d95ffa45a7e16a
+    command:
+      - qwen-asr-serve
+      - ${STT_MODEL:-Qwen/Qwen3-ASR-1.7B}
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      - --dtype
+      - float16
+      - --gpu-memory-utilization
+      - ${QWEN_GPU_MEMORY_UTILIZATION:-0.52}
+      - --max-model-len
+      - "8192"
+      - --max-num-seqs
+      - "4"
+    shm_size: "2gb"
     environment:
-      WHISPER__INFERENCE_DEVICE: cuda
-      WHISPER__COMPUTE_TYPE: float16
+      HF_HOME: /home/ubuntu/.cache/huggingface
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 300s
     deploy:
       resources:
         reservations:
@@ -13,10 +35,22 @@ services:
               capabilities: [gpu]
 
   kokoro:
-    image: ghcr.io/remsky/kokoro-fastapi-gpu:v0.9.0
+    # The service name is retained for a non-destructive GPU-profile migration.
+    image: custom-voice-agent/chatterbox-api:0.1.0
+    build:
+      context: ./chatterbox-api
     environment:
-      DEVICE_TYPE: cuda
-      USE_GPU: "true"
+      CHATTERBOX_DEVICE: cuda
+      CHATTERBOX_T3_MODEL: v3
+      HF_HOME: /models/huggingface
+    volumes:
+      - chatterbox-models:/models
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8880/healthz', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 300s
     deploy:
       resources:
         reservations:
@@ -24,3 +58,6 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
+
+volumes:
+  chatterbox-models:

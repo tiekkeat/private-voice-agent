@@ -1,6 +1,6 @@
 # Realtime Voice Gateway
 
-Self-hosted realtime voice assistant gateway built around LiveKit Agents, Silero VAD, Speaches/faster-whisper, an OpenAI-compatible streaming LLM, and Kokoro-FastAPI.
+Self-hosted realtime voice assistant gateway built around LiveKit Agents, Silero VAD, an OpenAI-compatible streaming LLM, and swappable local speech services. CPU mode uses Speaches/faster-whisper plus Kokoro; NVIDIA GPU mode uses Qwen3-ASR-1.7B plus Chatterbox Multilingual V3.
 
 This repository is at the first implementation milestone: the deployment and application skeleton is in place, with CPU/GPU variants, isolated per-user rooms, token issuance, health reporting, a minimal browser client, and LiveKit-managed interruption/cancellation.
 
@@ -8,9 +8,9 @@ This repository is at the first implementation milestone: the deployment and app
 
 ```text
 Browser ──HTTPS/WSS── Caddy ── LiveKit ── Voice Core
-                                      ├── Speaches / faster-whisper
+                                      ├── CPU: faster-whisper / GPU: Qwen3-ASR
                                       ├── OpenAI-compatible LLM
-                                      └── Kokoro-FastAPI
+                                      └── CPU: Kokoro / GPU: Chatterbox V3
 ```
 
 Only Caddy and LiveKit's WebRTC media ports are exposed to the LAN. Redis, STT, TTS, the token API, and the frontend container stay on the private Compose network.
@@ -46,8 +46,8 @@ Edit `.env` and set at least:
 - `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET`: long, randomly generated credentials
 - `PUBLIC_LIVEKIT_URL`: normally `wss://<VOICE_HOST>/livekit`
 - `LLM_BASE_URL`, `LLM_API_KEY`, and `LLM_MODEL`
-- `TTS_VOICE` and `TTS_CHINESE_VOICE` select the English and Mandarin Kokoro voices
-- `STT_LANGUAGE`: `auto` for bilingual use, `zh` to lock Mandarin, or `en` to lock English
+- `TTS_VOICE`, `TTS_CHINESE_VOICE`, and `TTS_MALAY_VOICE` select the English, Mandarin, and Malay TTS routes
+- `STT_LANGUAGE`: `auto` for code-switching, or `en`, `zh`, or `ms` to lock one language
 
 The LLM key is used only by the server-side worker and is never returned to the browser, following the [official OpenAI API authentication guidance](https://developers.openai.com/api/reference/overview#authentication).
 
@@ -88,7 +88,8 @@ docker compose \
 For a complete host preparation, transfer, firewall, GPU validation, deployment,
 TLS trust, and rollback procedure, see [Linux NVIDIA GPU deployment](docs/linux-gpu-deployment.md).
 
-Model images and weights are large. The first startup may take several minutes; follow it with:
+GPU model images and weights are large. The first startup can take 10–20 minutes,
+depending on the connection and model-cache state; follow it with:
 
 ```bash
 docker compose logs -f faster-whisper kokoro voice-core
@@ -138,10 +139,10 @@ For Python tests, create a virtual environment and install `voice-core/requireme
 
 - LiveKit `AgentSession` owns streamed STT → LLM → TTS orchestration, phrase chunking, playback tracking, and cancellation. This preserves only played assistant speech when an interruption occurs.
 - `OpenAICompatibleBackend` is the small backend boundary that Objective 2 can replace with an OpenClaw adapter.
-- Kokoro is connected through its OpenAI-compatible streaming speech endpoint using WAV/PCM, avoiding an MP3 decode stage.
-- Reply text containing Han characters is routed to `TTS_CHINESE_VOICE`; other replies use `TTS_VOICE`.
-- Speaches provides the OpenAI-compatible faster-whisper service. The stable `0.8.3` CPU and CUDA 12.6.3 image variants are pinned.
-- The default CPU profile uses multilingual Whisper Small for lower latency; a larger model can be selected with `STT_MODEL` when accuracy is more important.
+- Both TTS backends expose an OpenAI-compatible PCM endpoint, avoiding an MP3 decode stage.
+- GPU replies are split into English, Mandarin, and Malay spans before Chatterbox synthesis. Han characters route to Mandarin; common Malay vocabulary distinguishes Malay from English Latin text.
+- GPU STT uses the official Qwen3-ASR image pinned by digest. The Tesla T4 profile forces float16, reserves 52% of VRAM for vLLM, and omits the optional forced aligner.
+- The CPU fallback retains Speaches `0.8.3` and multilingual Whisper Small. A larger Whisper model can still be selected with `STT_MODEL`.
 - Container logs are rotated at 10 MB × 3 files.
 
 ## Persistence and backups
@@ -150,11 +151,12 @@ Back up these named volumes:
 
 - `redis-data` (ephemeral coordination; useful but not a conversation-history database)
 - `whisper-models` (downloaded model cache; recoverable by re-downloading)
+- `chatterbox-models` (GPU Chatterbox/Hugging Face cache; recoverable by re-downloading)
 - `caddy-data` and `caddy-config` (local CA and certificate state)
 
 Also back up `.env` securely. It contains LiveKit and LLM secrets and must never be committed. Conversation history is intentionally in memory and is lost when the worker restarts.
 
-Before upgrading LiveKit, LiveKit Agents, Speaches, or Kokoro, review their release notes, back up the Caddy volumes, and validate one- and two-user barge-in behavior again.
+Before upgrading LiveKit, LiveKit Agents, Qwen3-ASR, Chatterbox, Speaches, or Kokoro, review their release notes, back up the Caddy volumes, and validate one- and two-user barge-in behavior again.
 
 ## Next milestone
 

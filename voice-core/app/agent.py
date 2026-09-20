@@ -18,7 +18,7 @@ from livekit.plugins import openai, silero
 
 from app.backends import OpenAICompatibleBackend
 from app.config import get_settings
-from app.language import contains_han, contains_latin_word, select_tts_voice
+from app.language import select_tts_voice, split_tts_segments
 from app.logging_config import configure_logging
 from app.speech import stt_language_options
 
@@ -38,41 +38,58 @@ class VoiceAssistant(Agent):
         text: AsyncIterable[str],
         model_settings: ModelSettings,
     ) -> AsyncGenerator[rtc.AudioFrame, None]:
-        """Select an English or Mandarin Kokoro voice from the reply text."""
-        iterator = text.__aiter__()
-        buffered: list[str] = []
-        preview = ""
-
-        while len(preview.strip()) < 16:
-            try:
-                chunk = await anext(iterator)
-            except StopAsyncIteration:
-                break
-            buffered.append(chunk)
-            preview += chunk
-            if contains_han(preview) or contains_latin_word(preview):
-                break
-
-        if not buffered:
-            return
-
-        voice = select_tts_voice(
-            preview,
-            english_voice=settings.tts_voice,
-            chinese_voice=settings.tts_chinese_voice,
-        )
+        """Stream sentence-sized English, Mandarin, and Malay TTS segments."""
         activity = self._get_activity_or_raise()
-        activity.tts.update_options(voice=voice)
-        logger.info("tts_voice_selected", extra={"voice": voice})
 
-        async def replay_text() -> AsyncGenerator[str, None]:
-            for chunk in buffered:
-                yield chunk
-            async for chunk in iterator:
-                yield chunk
+        async def speak(sentence: str) -> AsyncGenerator[rtc.AudioFrame, None]:
+            for segment in split_tts_segments(sentence):
+                if not segment.text.strip():
+                    continue
+                voice = select_tts_voice(
+                    segment.text,
+                    english_voice=settings.tts_voice,
+                    chinese_voice=settings.tts_chinese_voice,
+                    malay_voice=settings.tts_malay_voice,
+                )
+                activity.tts.update_options(voice=voice)
+                logger.info(
+                    "tts_voice_selected",
+                    extra={"voice": voice, "language": segment.language},
+                )
 
-        async for frame in Agent.default.tts_node(self, replay_text(), model_settings):
-            yield frame
+                async def one_segment(
+                    value: str = segment.text,
+                ) -> AsyncGenerator[str, None]:
+                    yield value
+
+                async for frame in Agent.default.tts_node(
+                    self, one_segment(), model_settings
+                ):
+                    yield frame
+
+        buffer = ""
+        async for chunk in text:
+            buffer += chunk
+            while True:
+                boundary = next(
+                    (index + 1 for index, char in enumerate(buffer) if char in ".!?。！？"),
+                    None,
+                )
+                if boundary is None:
+                    break
+                sentence, buffer = buffer[:boundary], buffer[boundary:]
+                async for frame in speak(sentence):
+                    yield frame
+
+            if len(buffer) >= 180 and " " in buffer:
+                boundary = buffer.rfind(" ", 0, 180)
+                sentence, buffer = buffer[:boundary], buffer[boundary:]
+                async for frame in speak(sentence):
+                    yield frame
+
+        if buffer.strip():
+            async for frame in speak(buffer):
+                yield frame
 
 
 def prewarm(proc: JobProcess) -> None:

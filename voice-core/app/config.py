@@ -24,15 +24,17 @@ class Settings(BaseSettings):
 
     stt_base_url: str = "http://faster-whisper:8000/v1"
     stt_model: str = "Systran/faster-whisper-small"
-    stt_language: Literal["auto", "en", "zh"] = "auto"
+    stt_language: Literal["auto", "en", "zh", "ms"] = "auto"
     stt_prompt: str = (
-        "The speaker uses only English or Mandarin Chinese. Transcribe Mandarin "
-        "as Simplified Chinese. Ignore coughs, breathing, and other non-speech sounds."
+        "The speaker may code-switch between Malaysian English, Mandarin Chinese, "
+        "and Malay. Preserve each spoken language and transcribe Mandarin as Simplified "
+        "Chinese. Ignore coughs, breathing, and other non-speech sounds."
     )
     tts_base_url: str = "http://kokoro:8880/v1"
     tts_model: str = "kokoro"
     tts_voice: str = "af_heart"
     tts_chinese_voice: str = "zf_xiaoxiao"
+    tts_malay_voice: str = "af_heart"
 
     turn_detector_mode: Literal["v1-mini", "vad"] = "v1-mini"
     turn_detector_version: str = "v1-mini"
@@ -43,9 +45,9 @@ class Settings(BaseSettings):
 
     system_prompt: str = (
         "You are a concise, friendly voice assistant. Reply in the user's requested "
-        "language. Otherwise use the dominant English or Mandarin context, with English "
-        "as fallback. Keep most replies to one or two short sentences. Avoid markdown "
-        "because your response will be spoken aloud."
+        "language. Otherwise naturally follow the user's mix of Malaysian English, "
+        "Mandarin Chinese, and Malay, with English as fallback. Keep most replies to one "
+        "or two short sentences. Avoid markdown because your response will be spoken aloud."
     )
     deployment_mode: Literal["cpu", "gpu"] = "cpu"
     stt_device: str = "cpu"

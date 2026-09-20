@@ -46,16 +46,17 @@ sudo nvidia-ctk runtime configure --runtime=docker
 sudo systemctl restart docker
 ```
 
-Confirm a container can use the GPU. This must succeed before deploying the
-application:
+Confirm a container can use the GPU. The Qwen image uses CUDA 12.8; on a Tesla
+T4, a current data-center driver with CUDA 12 compatibility is required. Check
+the `CUDA Version` shown by `nvidia-smi`, then run:
 
 ```bash
 sudo docker run --rm --gpus all \
-  nvidia/cuda:12.6.3-base-ubuntu24.04 nvidia-smi
+  nvidia/cuda:12.8.0-base-ubuntu22.04 nvidia-smi
 ```
 
 Docker's Compose GPU syntax requires `capabilities: [gpu]`; the supplied GPU
-override already includes it for both Whisper and Kokoro.
+override already includes it for both Qwen3-ASR and Chatterbox.
 
 ## 2. Transfer the repository
 
@@ -109,14 +110,28 @@ Use the Linux host's real LAN IP for `LIVEKIT_NODE_IP`. Ensure `VOICE_HOST`
 resolves to that IP from every client, using local DNS or client hosts files.
 Generate new LiveKit credentials rather than publishing them in Git.
 
-The supplied `.env.gpu` selects CUDA/float16 and the multilingual large-v3
-turbo Whisper model. To favor VRAM efficiency over accuracy, change its
-`STT_MODEL` to `Systran/faster-whisper-small` and its compute type to `int8`.
+The supplied `.env.gpu` is tuned for one 16 GB Tesla T4. It selects
+Qwen3-ASR-1.7B in float16, caps vLLM at 52% of GPU memory, and selects
+Chatterbox Multilingual V3 for English, Mandarin, and Malay output:
 
-For mixed English/Mandarin conversations, keep `STT_LANGUAGE=auto`. Very short
-utterances do not contain much evidence for Whisper's language detector, so a
-Mandarin-heavy deployment should use `STT_LANGUAGE=zh`; this prevents Mandarin
-from being decoded as Korean or Russian. Use `en` for English-only sessions.
+```dotenv
+STT_MODEL=Qwen/Qwen3-ASR-1.7B
+STT_MODEL_SETUP_ENABLED=false
+QWEN_GPU_MEMORY_UTILIZATION=0.52
+TTS_MODEL=chatterbox-multilingual-v3
+TTS_VOICE=en
+TTS_CHINESE_VOICE=zh
+TTS_MALAY_VOICE=ms
+SYSTEM_PROMPT=You are a concise friendly voice assistant. Naturally follow the user's mix of Malaysian English Mandarin Chinese and Malay.
+```
+
+Do not add the optional Qwen forced aligner on the T4; the voice gateway does
+not need timestamps, and the extra model would consume VRAM needed by TTS.
+
+For Malaysian English/Mandarin/Malay conversations, keep `STT_LANGUAGE=auto`.
+Use `zh`, `en`, or `ms` only for a session that must be locked to one language.
+Qwen supports all three languages, but very short sounds still contain little
+language evidence, so the interruption thresholds remain important.
 
 The default interruption settings filter brief non-speech sounds while keeping
 barge-in enabled:
@@ -140,7 +155,7 @@ Permit these paths from trusted LAN clients:
 - TCP 7881: LiveKit WebRTC TCP fallback
 - UDP 50000-50100: LiveKit WebRTC media
 
-Do not expose Redis, Whisper, Kokoro, the token API, or container-internal port
+Do not expose Redis, Qwen, Chatterbox, the token API, or container-internal port
 7880. They remain on the private Compose network. Be aware that Docker-published
 ports interact with host firewall rules; enforce restrictions in the
 `DOCKER-USER` chain or the upstream network firewall.
@@ -169,8 +184,11 @@ sudo docker compose \
   up -d --build
 ```
 
-The first run downloads the Whisper model. `whisper-model-setup` should finish
-as `Exited (0)`; that is success, not a crashed service. Watch startup with:
+Keep at least 50 GB of free Docker storage. The first run pulls a large Qwen
+image, builds the Chatterbox API image, and
+downloads both model weight sets. `whisper-model-setup` remains as a compatibility
+one-shot and should finish as `Exited (0)` after logging that setup was skipped;
+that is success, not a crashed service. Watch startup with:
 
 ```bash
 sudo docker compose \
@@ -188,12 +206,20 @@ sudo docker compose \
   logs -f whisper-model-setup faster-whisper kokoro voice-core
 ```
 
-Verify both inference containers see the GPU:
+Verify both inference containers see the T4 and inspect memory allocation:
 
 ```bash
 sudo docker compose exec faster-whisper nvidia-smi
 sudo docker compose exec kokoro nvidia-smi
 ```
+
+The Qwen service keeps the legacy Compose name `faster-whisper`, and the
+Chatterbox service keeps the name `kokoro`. This is intentional: it preserves
+the base stack dependency graph and makes rollback non-destructive.
+
+If Chatterbox reports CUDA out-of-memory, lower
+`QWEN_GPU_MEMORY_UTILIZATION` in `.env.gpu` from `0.52` to `0.48`, recreate both
+inference services, and test again. Do not raise it above `0.55` on a single T4.
 
 If the machine has multiple GPUs, replace `count: 1` in
 `docker-compose.gpu.yml` with `device_ids: ['0']` for each GPU-enabled service.
@@ -215,10 +241,11 @@ curl --fail --cacert ./caddy-root.crt \
   "https://${VOICE_HOST}/api/health"
 ```
 
-The response should report `deployment_mode: gpu`, STT device `cuda`, compute
-type `float16`, and healthy STT/TTS dependencies. Open
+The response should report `deployment_mode: gpu`, model
+`Qwen/Qwen3-ASR-1.7B`, STT device `cuda`, compute type `float16`, TTS model
+`chatterbox-multilingual-v3`, and healthy STT/TTS dependencies. Open
 `https://<VOICE_HOST>`, connect the microphone, and test English, Mandarin,
-interruption, and a second simultaneous browser session.
+Malay, mixed utterances, interruption, and then a second browser session.
 
 ## 7. Persistence, backup, and rollback
 
@@ -227,7 +254,8 @@ The minimum backup set is:
 - `.env` and `.env.gpu`, stored securely outside Git
 - `caddy-data` and `caddy-config`, if clients should keep trusting the same CA
 - `redis-data` only if short-lived coordination state matters
-- `whisper-models` optionally; it is a downloadable cache
+- `whisper-models` optionally; GPU mode reuses it as the Qwen Hugging Face cache
+- `chatterbox-models` optionally; it is a downloadable Chatterbox cache
 
 A fresh host creates a new Caddy CA. If the old `caddy-data` volume is not
 migrated, install the new root certificate on clients and remove trust for the

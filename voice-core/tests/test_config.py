@@ -1,6 +1,12 @@
 from app.config import Settings
 from app.model_setup import model_url
-from app.language import contains_han, contains_latin_word, select_tts_voice
+from app.language import (
+    TTSSegment,
+    contains_han,
+    contains_latin_word,
+    select_tts_voice,
+    split_tts_segments,
+)
 from app.speech import stt_language_options
 
 
@@ -39,6 +45,18 @@ def test_english_reply_selects_english_voice() -> None:
     assert not contains_han("Hello, how are you?")
     assert contains_latin_word("Hello")
     assert select_tts_voice("Hello!", "af_heart", "zf_xiaoxiao") == "af_heart"
+
+
+def test_malay_reply_selects_malay_voice() -> None:
+    assert select_tts_voice("Boleh, nanti saya balik.", "en", "zh", "ms") == "ms"
+
+
+def test_malaysian_code_switching_is_split_for_tts() -> None:
+    assert split_tts_segments("Okay, 我等下 call you balik.") == [
+        TTSSegment("en", "Okay, "),
+        TTSSegment("zh", "我等下"),
+        TTSSegment("ms", " call you balik."),
+    ]
 
 
 def test_auto_stt_detects_language_with_prompt() -> None:

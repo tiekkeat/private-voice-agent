@@ -2,8 +2,6 @@ import asyncio
 import re
 import uuid
 from datetime import timedelta
-from urllib.parse import quote
-
 import httpx
 from fastapi import FastAPI, HTTPException
 from livekit import api
@@ -74,7 +72,7 @@ async def health() -> dict[str, object]:
                 _probe(
                     client,
                     "stt",
-                    f"{settings.stt_base_url}/models/{quote(settings.stt_model, safe='')}",
+                    f"{settings.stt_base_url}/models",
                 ),
                 _probe(client, "tts", settings.tts_base_url + "/models"),
             )
