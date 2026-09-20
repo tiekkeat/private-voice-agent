@@ -51,11 +51,9 @@ def test_malay_reply_selects_malay_voice() -> None:
     assert select_tts_voice("Boleh, nanti saya balik.", "en", "zh", "ms") == "ms"
 
 
-def test_malaysian_code_switching_is_split_for_tts() -> None:
+def test_mandarin_code_switching_stays_in_one_tts_request() -> None:
     assert split_tts_segments("Okay, 我等下 call you balik.") == [
-        TTSSegment("en", "Okay, "),
-        TTSSegment("zh", "我等下"),
-        TTSSegment("ms", " call you balik."),
+        TTSSegment("zh", "Okay, 我等下 call you balik."),
     ]
 
 
