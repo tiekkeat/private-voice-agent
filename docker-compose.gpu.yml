@@ -20,6 +20,7 @@ services:
     shm_size: "2gb"
     environment:
       HF_HOME: /home/ubuntu/.cache/huggingface
+      HF_HUB_DISABLE_XET: "1"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5)"]
       interval: 30s
@@ -41,7 +42,6 @@ services:
       context: ./chatterbox-api
     environment:
       CHATTERBOX_DEVICE: cuda
-      CHATTERBOX_T3_MODEL: v3
       HF_HOME: /models/huggingface
     volumes:
       - chatterbox-models:/models
